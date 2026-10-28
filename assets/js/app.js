@@ -446,15 +446,34 @@
   }
 
   function boot() {
-    var mapReady = initMap();
-    wire();
+    var mapReady;
+    try {
+      // На телефоне файлы иногда не догружаются/кэшируются битыми — проверяем
+      // зависимости и говорим об этом вслух, а не висим на «загрузка…».
+      if (!window.L) throw new Error('не загрузилась библиотека карты (Leaflet)');
+      if (!window.CONFIG) throw new Error('не загрузился assets/js/config.js');
+      if (!window.Store) throw new Error('не загрузился assets/js/store.js');
+      mapReady = initMap();
+      wire();
+    } catch (e) {
+      setStatus('Ошибка запуска: ' + e.message + ' — обнови страницу', true);
+      return;
+    }
     mapReady.then(function () {
-      Editor.init(map, previewGroup, function () {
-        rerender();
-        buildFilters();
-        setStatus(statusText(), !!Store.lastError());
-      });
-      return Store.load();
+      try {
+        Editor.init(map, previewGroup, function () {
+          rerender();
+          buildFilters();
+          setStatus(statusText(), !!Store.lastError());
+        });
+      } catch (e) {
+        // рисование отвалилось — карта и слои всё равно должны работать
+        setStatus('Редактор не запустился: ' + e.message, true);
+      }
+      // Список слоёв и кнопки показываем сразу, не дожидаясь ответа базы.
+      buildFilters();
+      setStatus('загрузка…', false);
+      return Store.load().catch(function () { return Store.all(); });
     }).then(function () {
       maybeDemo();
       onDataChanged(Store.all());
@@ -470,6 +489,8 @@
       if (new URLSearchParams(location.search).has('add')) {
         setTimeout(function () { Editor.startAdd(); }, 400);
       }
+    }).catch(function (e) {
+      setStatus('Ошибка: ' + ((e && e.message) || e) + ' — обнови страницу', true);
     });
     Store.subscribe(onDataChanged);
   }

@@ -30,10 +30,25 @@ window.Store = (function () {
 
   function base() { return cfg.url.replace(/\/$/, ''); }
 
+  // Мобильный интернет любит «подвисать»: без таймаута запрос может не ответить
+  // никогда, и тогда сайт навсегда остаётся в состоянии «загрузка…».
+  var TIMEOUT = 12000;
+  function tfetch(url, opts) {
+    if (typeof AbortController === 'undefined') return fetch(url, opts);
+    var ctrl = new AbortController();
+    var id = setTimeout(function () { ctrl.abort(); }, TIMEOUT);
+    opts = opts || {};
+    opts.signal = ctrl.signal;
+    return fetch(url, opts).then(function (r) { clearTimeout(id); return r; }, function (e) {
+      clearTimeout(id);
+      throw new Error(e && e.name === 'AbortError' ? 'база не ответила за ' + Math.round(TIMEOUT / 1000) + ' с' : (e && e.message) || 'сеть недоступна');
+    });
+  }
+
   function api(path, opts) {
     opts = opts || {};
     opts.headers = headers(opts.headers);
-    return fetch(base() + '/rest/v1/' + table + path, opts)
+    return tfetch(base() + '/rest/v1/' + table + path, opts)
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 300)); });
         return r.status === 204 ? null : r.json();
@@ -41,7 +56,7 @@ window.Store = (function () {
   }
 
   function rpc(fn, body) {
-    return fetch(base() + '/rest/v1/rpc/' + fn, {
+    return tfetch(base() + '/rest/v1/rpc/' + fn, {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify(body || {})
@@ -154,7 +169,10 @@ window.Store = (function () {
     lastError = null;
     if (!online) { loadLocal(); return Promise.resolve(signs); }
     return api('?select=*&order=updated_at.desc')
-      .then(function (rows) { signs = rows.map(fromRow); emit(); return signs; })
+      .then(function (rows) {
+        if (!Array.isArray(rows)) throw new Error('база вернула не список');
+        signs = rows.map(fromRow); emit(); return signs;
+      })
       .catch(function (e) {
         lastError = e.message;
         loadLocal();
