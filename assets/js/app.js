@@ -1,11 +1,27 @@
 /* Сборка приложения: карта, слои, фильтры, кнопки. */
 (function () {
-  var map, signsGroup, roadsGroup, labelsLayer, previewGroup;
+  var map, signsGroup, roadsGroup, labelsLayer, previewGroup, buildGroup;
   var signs = [];
   var filters = { types: {}, timeOnly: false, speeds: {} };
   var renderedCount = 0;
   var panoOpen = false;
   var labelsOn = true;
+  var buildingsOn = true;
+
+  // Псевдо-3D слой зданий живёт в своей панели под знаками, но над спутником
+  function initBuildings() {
+    if (map.getPane('build')) return;
+    var pane = map.createPane('build');
+    pane.style.zIndex = 310;            // > картинка (200), < знаки (400)
+    buildGroup = L.layerGroup();
+    buildGroup.addTo(map);
+    map.on('zoomend', renderBuildings);
+    renderBuildings();
+  }
+  function renderBuildings() {
+    if (!buildingsOn || !buildGroup) { if (buildGroup) buildGroup.clearLayers(); return; }
+    BuildingRender.render(buildGroup, map);
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -40,6 +56,7 @@
     roadsGroup = L.layerGroup();
     previewGroup = L.layerGroup().addTo(map);
     signsGroup = L.layerGroup().addTo(map);
+    initBuildings();
 
     // дорожная сеть уже в data/roads.js — работает и через file://, и на Pages
     if (window.ROADS_DATA) {
@@ -337,6 +354,11 @@
     });
     $('chk-roads').addEventListener('change', function (e) {
       if (e.target.checked) { ensureRoads(); roadsGroup.addTo(map); } else map.removeLayer(roadsGroup);
+    });
+    var bldChk = $('chk-buildings');
+    if (bldChk) bldChk.addEventListener('change', function () {
+      buildingsOn = bldChk.checked;
+      renderBuildings();
     });
     var namesChk = $('chk-names');
     if (namesChk) namesChk.addEventListener('change', function () {
