@@ -221,6 +221,7 @@ input:focus, select:focus {
 /* ---------- маркеры ---------- */
 
 .kng-mk { background: none; border: 0; }
+.kng-chev, .kng-arrow { pointer-events: none; }   /* стрелки лежат на полосе и не мешают клику по ней */
 .kng-chev svg, .kng-arrow svg { display: block; filter: drop-shadow(0 0 3px #000000cc); }
 
 .kng-speed-wrap { display: flex; align-items: center; justify-content: center; }

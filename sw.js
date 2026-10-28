@@ -1,7 +1,7 @@
 /* Service worker: офлайн-оболочка сайта.
    Код сайта берём из сети (чтобы правки подхватывались сразу), а если сети нет —
    отдаём из кэша. Плитки спутника и панорамы не кэшируем: они и так грузятся с CDN. */
-const VERSION = 'kng-v8';
+const VERSION = 'kng-v9';
 const SHELL = [
   './',
   './index.html',
@@ -14,13 +14,11 @@ const SHELL = [
   './assets/js/roads.js',
   './assets/js/signs-svg.js',
   './assets/js/render.js',
-  './assets/js/buildings.js',
   './assets/js/editor.js',
   './assets/js/store.js',
   './assets/js/panorama.js',
   './assets/js/app.js',
   './data/roads.js',
-  './data/buildings.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png'
 ];

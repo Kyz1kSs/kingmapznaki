@@ -47,11 +47,12 @@ window.Geo = (function () {
     return out;
   }
 
-  // Точки вдоль линии с шагом step метров: [{lat,lng,bearing,i}]
-  function sampleAlong(pts, step) {
+  // Точки вдоль линии с шагом step метров (from — отступ первой точки, в метрах):
+  // [{lat,lng,bearing,i}]
+  function sampleAlong(pts, step, from) {
     var res = [];
     if (pts.length < 2) return res;
-    var acc = 0, next = 0;
+    var acc = 0, next = from || 0;
     for (var i = 1; i < pts.length; i++) {
       var segLen = hav(pts[i - 1], pts[i]);
       var b = bearing(pts[i - 1], pts[i]);

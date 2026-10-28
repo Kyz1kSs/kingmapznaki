@@ -237,22 +237,39 @@ window.SignRender = (function () {
     });
   }
 
-  function drawChevrons(sign, group) {
+  // Шаг шевронов: на земле — 12 м (раз в 10–15 м), но не ближе ~20 px на экране,
+  // иначе на дальних зумах стрелки слипаются в сплошной пунктир.
+  function chevronStep(map) {
+    if (!map || !map.getZoom) return 12;
+    var mpp = 156543.03392 * Math.cos((map.getCenter().lat || 0) * Math.PI / 180) / Math.pow(2, map.getZoom());
+    return Math.max(12, 20 * mpp);
+  }
+
+  // Шевроны лежат на самой полосе знака (для сторонних знаков — на каждой стороне)
+  // и показывают направление действия зоны.
+  function drawChevrons(sign, group, map) {
     var T = TYPES[sign.type];
     if (!T.arrowed) return;
     if (sign.direction === 'both') return;
     var reverse = sign.direction === 'backward';
-    var path = sign.path;
     var color = sign.type === 'speed' ? speedColor(sign.speed) : T.color;
-    var samples = Geo.sampleAlong(path, 48);
-    var max = 12;
-    for (var i = 0; i < samples.length && i < max; i++) {
-      var s = samples[i];
-      var brg = s.bearing + (reverse ? 180 : 0);
-      L.marker([s.lat, s.lng], {
-        icon: chevron(brg, color), interactive: false, keyboard: false, zIndexOffset: 300
-      }).addTo(group);
-    }
+    var sides = [];
+    if (T.sided) {
+      if (sign.side === 'both') { sides = [-1, 1]; }
+      else sides = [sign.side === 'left' ? -1 : 1];
+    } else sides = [0];
+    var step = chevronStep(map);
+    sides.forEach(function (sgn) {
+      var path = T.offset ? shifted(sign, sgn * T.offset) : sign.path;
+      var samples = Geo.sampleAlong(path, step, step / 2);
+      for (var i = 0; i < samples.length; i++) {
+        var s = samples[i];
+        var brg = s.bearing + (reverse ? 180 : 0);
+        L.marker([s.lat, s.lng], {
+          icon: chevron(brg, color), interactive: false, keyboard: false, zIndexOffset: 300
+        }).addTo(group);
+      }
+    });
   }
 
   // Смещение точки вбок от линии движения (meters > 0 — вправо)
@@ -394,7 +411,7 @@ window.SignRender = (function () {
       if (!s.path || s.path.length < 2) continue;
       drawStripes(s, group, map);
       if (detail) {
-        drawChevrons(s, group);
+        drawChevrons(s, group, map);
         drawLaneArrows(s, group);
         if (speedDetail) drawSpeedBadges(s, group);
         var b = badgeFor(s);
