@@ -357,6 +357,10 @@
       document.addEventListener('visibilitychange', function () {
         if (!document.hidden) syncNow();
       });
+      // ?add=1 — сразу режим рисования (используется ярлыком PWA)
+      if (new URLSearchParams(location.search).has('add')) {
+        setTimeout(function () { Editor.startAdd(); }, 400);
+      }
     });
     Store.subscribe(onDataChanged);
   }
