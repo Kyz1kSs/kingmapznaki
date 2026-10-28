@@ -227,3 +227,6 @@ body.editing #map { cursor: crosshair; }
   #sidebar { width: 290px; min-width: 290px; }
   #pano-wrap { width: 50%; min-width: 320px; }
 }
+
+/* ---------- синхронизация ---------- */
+.sync-time { font-size: 11.5px; color: var(--muted); align-self: center; flex: 0 0 auto; white-space: nowrap; }

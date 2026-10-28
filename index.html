@@ -5,6 +5,12 @@
 <title>Знаки Кингисеппа — карта</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Карта дорожных знаков Кингисеппа: стоянка и остановка запрещена, движение по полосам, ограничения скорости.">
+<meta name="theme-color" content="#12161d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Знаки Кингисеппа">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23e5383b'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23fff'/%3E%3Ctext x='16' y='21.5' font-size='14' font-family='Arial' font-weight='bold' text-anchor='middle' fill='%23111'%3E40%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/vendor/leaflet.css">
 <link rel="stylesheet" href="assets/app.css">
@@ -46,6 +52,10 @@
       <section class="sb-sec">
         <div class="sb-title">Данные</div>
         <div class="row">
+          <button id="btn-sync" title="Подтянуть свежие правки из общей базы прямо сейчас">↻ Обновить</button>
+          <span class="sync-time" id="sync-time">—</span>
+        </div>
+        <div class="row">
           <button id="btn-export">Экспорт JSON</button>
           <button id="btn-import">Импорт</button>
         </div>
@@ -57,6 +67,7 @@
       <section class="sb-sec sb-help">
         <div class="sb-title">Как это работает</div>
         <p>Спутник — Esri. Участки рисуются полосой вдоль бордюра: клик по полосе открывает карточку, там же правка и удаление.</p>
+        <p>Правки видны всем: они уходят в общую базу и раз в 30 секунд подтягиваются сами. Сайт можно установить как приложение — в меню браузера «Установить приложение» (на iPhone: «Поделиться» → «На экран «Домой»»).</p>
         <p>Кнопка «Панорама» открывает панораму Яндекса в точке — удобно проверять знаки, не переключая вкладки. «Яндекс ↗» открывает это же место на спутнике Яндекса, там снимки чётче.</p>
       </section>
     </div>
@@ -175,5 +186,13 @@
 <script src="assets/js/panorama.js"></script>
 <script src="assets/js/editor.js"></script>
 <script src="assets/js/app.js"></script>
+<script>
+  // PWA: установка на телефон/десктоп и офлайн-оболочка.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* без SW сайт тоже работает */ });
+    });
+  }
+</script>
 </body>
 </html>

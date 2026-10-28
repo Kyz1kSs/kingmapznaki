@@ -87,6 +87,44 @@ window.Store = (function () {
       });
   }
 
+  // Отпечаток набора знаков: по нему видно, изменилось ли что-то на сервере.
+  function fingerprint(list) {
+    return JSON.stringify(list.map(function (s) {
+      return [s.id, s.type, s.side, s.direction, s.speed, s.lanes, s.note, s.path && s.path.length, s.updatedAt];
+    }));
+  }
+
+  // Тихое обновление с сервера. Возвращает true, если данные поменялись.
+  var refreshing = null;
+  function refresh() {
+    if (!online) return Promise.resolve(false);
+    if (refreshing) return refreshing;             // без параллельных запросов
+    refreshing = api('?select=*&order=updated_at.desc')
+      .then(function (rows) {
+        lastError = null;
+        var next = rows.map(fromRow);
+        if (fingerprint(next) === fingerprint(signs)) return false;
+        signs = next;
+        emit();
+        return true;
+      })
+      .catch(function (e) { lastError = e.message; return false; })
+      .then(function (res) { refreshing = null; return res; });
+    return refreshing;
+  }
+
+  var timer = null;
+  function startAutoRefresh(ms, guard) {
+    if (!online || timer) return;
+    timer = setInterval(function () {
+      if (document.hidden) return;
+      if (guard && guard()) return;                 // идёт рисование/открыта карточка — не мешаем
+      refresh();
+    }, ms || 30000);
+  }
+
+  function stopAutoRefresh() { if (timer) { clearInterval(timer); timer = null; } }
+
   function upsert(sign) {
     var now = new Date().toISOString();
     sign.updatedAt = now;
@@ -134,6 +172,9 @@ window.Store = (function () {
 
   return {
     load: load,
+    refresh: refresh,
+    startAutoRefresh: startAutoRefresh,
+    stopAutoRefresh: stopAutoRefresh,
     upsert: upsert,
     remove: remove,
     replaceAll: replaceAll,

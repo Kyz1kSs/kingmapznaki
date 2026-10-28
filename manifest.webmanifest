@@ -1,0 +1,21 @@
+{
+  "name": "Знаки Кингисеппа",
+  "short_name": "Знаки",
+  "description": "Карта дорожных знаков Кингисеппа на спутнике: стоянка и остановка запрещена, движение по полосам, ограничения скорости.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12161d",
+  "theme_color": "#12161d",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Добавить участок", "url": "./index.html?add=1" }
+  ]
+}

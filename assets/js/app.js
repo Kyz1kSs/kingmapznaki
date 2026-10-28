@@ -143,6 +143,24 @@
     buildFilters();
     rerender();
     setStatus(statusText(), !!Store.lastError());
+    var t = new Date();
+    var stamp = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+    var el = $('sync-time');
+    if (el) el.textContent = Store.isOnline() ? 'обновлено ' + stamp : 'локально';
+  }
+
+  function syncNow() {
+    var el = $('sync-time');
+    if (el) el.textContent = 'обновляю…';
+    return Store.refresh().then(function (changed) {
+      if (!changed) {
+        var t = new Date();
+        var stamp = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+        var e2 = $('sync-time');
+        if (e2) e2.textContent = 'обновлено ' + stamp;
+      }
+      return changed;
+    });
   }
 
   // ---------- панорама ----------
@@ -205,6 +223,8 @@
 
   function wire() {
     $('btn-add').addEventListener('click', function () { Editor.startAdd(); });
+    var syncBtn = $('btn-sync');
+    if (syncBtn) syncBtn.addEventListener('click', function () { syncNow(); });
     $('btn-export').addEventListener('click', exportJson);
     $('btn-import').addEventListener('click', function () { $('file-import').click(); });
     $('file-import').addEventListener('change', function (e) {
@@ -329,6 +349,14 @@
     }).then(function () {
       maybeDemo();
       onDataChanged(Store.all());
+      // Правки других людей подтягиваются сами: раз в 30 с, если пользователь
+      // ничего не рисует и не держит открытой карточку знака.
+      Store.startAutoRefresh(30000, function () {
+        return Editor.isActive() || !!document.querySelector('.leaflet-popup');
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) syncNow();
+      });
     });
     Store.subscribe(onDataChanged);
   }
