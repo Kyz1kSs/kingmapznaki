@@ -272,5 +272,92 @@ body.editing #map { cursor: crosshair; }
   #pano-wrap { width: 50%; min-width: 320px; }
 }
 
+/* ---------- телефон ---------- */
+
+.topbar, #sb-scrim, .sb-grab { }
+.topbar { display: none; }
+#sb-scrim { display: none; }
+.sb-grab { display: none; }
+
+@media (max-width: 760px) {
+  html, body { overflow: hidden; }
+
+  #app { display: block; }
+
+  /* карта на весь экран */
+  #map-wrap { position: absolute; inset: 0; }
+
+  /* верхняя плашка */
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    position: absolute; left: 0; right: 0; top: 0; z-index: 620;
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+    background: linear-gradient(#0b0f13e6, #0b0f1300);
+    pointer-events: none;
+  }
+  .topbar > * { pointer-events: auto; }
+  .topbar button {
+    width: 42px; height: 42px; padding: 0; font-size: 18px; line-height: 1;
+    background: #171c23ee; border-radius: 12px; box-shadow: 0 4px 14px #0007;
+  }
+  .tb-title { flex: 1 1 auto; font-weight: 650; font-size: 14px; text-shadow: 0 1px 4px #000b; }
+
+  /* боковая панель превращается в нижний лист */
+  #sidebar {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: auto; min-width: 0; height: auto; max-height: 76vh;
+    border-radius: 16px 16px 0 0; border-right: 0; border-top: 1px solid var(--line);
+    box-shadow: 0 -12px 40px #000b; z-index: 1100;
+    transform: translateY(102%); transition: transform .24s ease;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  body.sb-open #sidebar { transform: none; }
+  .sb-grab {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 22px; border: 0; background: transparent; padding: 0;
+  }
+  .sb-grab span { width: 42px; height: 4px; border-radius: 3px; background: #3d4a5a; }
+  .sb-head { padding: 0 16px 10px; }
+  .sb-head h1 { font-size: 16px; }
+  .sb-scroll { padding: 4px 14px calc(24px + env(safe-area-inset-bottom)); }
+
+  #sb-scrim {
+    display: none; position: absolute; inset: 0; z-index: 1050;
+    background: #0007; backdrop-filter: blur(1px);
+  }
+  /* лист и карточки выше контролов Leaflet (у них z-index 800–1000) */
+  #sidebar { z-index: 1100; }
+  #pano-wrap { z-index: 1250; }
+  #editor { z-index: 1300; }
+  body.sb-open #sb-scrim { display: block; }
+
+  /* кнопки на карте */
+  .fab-col { top: calc(58px + env(safe-area-inset-top)); right: 10px; }
+  .fab { padding: 9px 12px; font-size: 12.5px; border-radius: 11px; }
+
+  .hint { top: calc(58px + env(safe-area-inset-top)); max-width: 92%; font-size: 12px; padding: 7px 12px; }
+
+  /* карточка и панорама — на весь экран */
+  #editor {
+    left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+    width: auto; max-height: 72vh;
+  }
+  #pano-wrap {
+    left: 0; right: 0; top: 0; bottom: 0;
+    width: auto; min-width: 0; max-width: none; border-radius: 0; border: 0;
+  }
+  .pano-head { padding-top: calc(8px + env(safe-area-inset-top)); }
+
+  .leaflet-control-attribution { max-width: 70%; white-space: nowrap; overflow: hidden; }
+  .leaflet-control-zoom { display: none; }
+
+  /* пальцем в кнопки должно попадать */
+  button, .chip, .f-row { min-height: 38px; }
+  .f-row.small { padding: 8px 6px; }
+  input[type=text], input[type=time], input[type=number], input[type=password], select { min-height: 40px; font-size: 16px; }
+  .leaflet-popup-content { font-size: 13.5px; }
+  .pop-btns button { padding: 9px 8px; }
+}
+
 /* ---------- синхронизация ---------- */
 .sync-time { font-size: 11.5px; color: var(--muted); align-self: center; flex: 0 0 auto; white-space: nowrap; }

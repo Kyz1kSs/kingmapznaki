@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Знаки Кингисеппа — карта</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Карта дорожных знаков Кингисеппа: стоянка и остановка запрещена, движение по полосам, ограничения скорости.">
 <meta name="theme-color" content="#12161d">
 <link rel="manifest" href="manifest.webmanifest">
@@ -19,6 +19,7 @@
 
 <div id="app">
   <aside id="sidebar">
+    <button id="sb-close" class="sb-grab" title="Свернуть" aria-label="Свернуть панель"><span></span></button>
     <div class="sb-head">
       <h1>Знаки Кингисеппа</h1>
       <p class="sub" id="storage-status">загрузка…</p>
@@ -91,6 +92,13 @@
 
   <main id="map-wrap">
     <div id="map"></div>
+
+    <div class="topbar">
+      <button id="btn-sb" title="Слои и настройки" aria-label="Слои и настройки">☰</button>
+      <span class="tb-title">Знаки Кингисеппа</span>
+      <button id="btn-sync-m" title="Обновить данные">↻</button>
+    </div>
+    <div id="sb-scrim"></div>
 
     <div id="hint" class="hint" hidden></div>
 

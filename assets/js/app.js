@@ -9,9 +9,10 @@
   function $(id) { return document.getElementById(id); }
 
   function initMap() {
+    var startZoom = isMobile() ? Math.max(window.CONFIG.zoom, 16) : window.CONFIG.zoom;
     map = L.map('map', {
       center: window.CONFIG.center,
-      zoom: window.CONFIG.zoom,
+      zoom: startZoom,
       minZoom: window.CONFIG.minZoom,
       maxZoom: window.CONFIG.maxZoom,
       zoomControl: false,
@@ -296,8 +297,26 @@
 
   // ---------- запуск ----------
 
+  function isMobile() { return window.matchMedia('(max-width: 760px)').matches; }
+
+  // На телефоне сайдбар — нижний лист: открывается кнопкой ☰, закрывается
+  // тапом по затемнению, ручкой или началом рисования.
+  function toggleSidebar(force) {
+    var open = force === undefined ? !document.body.classList.contains('sb-open') : !!force;
+    document.body.classList.toggle('sb-open', open);
+    if (open) { setTimeout(function () { map.invalidateSize(); }, 260); }
+  }
+
   function wire() {
-    $('btn-add').addEventListener('click', function () { Editor.startAdd(); });
+    $('btn-add').addEventListener('click', function () { toggleSidebar(false); Editor.startAdd(); });
+    var sbBtn = $('btn-sb');
+    if (sbBtn) sbBtn.addEventListener('click', function () { toggleSidebar(); });
+    var sbClose = $('sb-close');
+    if (sbClose) sbClose.addEventListener('click', function () { toggleSidebar(false); });
+    var scrim = $('sb-scrim');
+    if (scrim) scrim.addEventListener('click', function () { toggleSidebar(false); });
+    var syncM = $('btn-sync-m');
+    if (syncM) syncM.addEventListener('click', function () { syncNow(); });
     var syncBtn = $('btn-sync');
     if (syncBtn) syncBtn.addEventListener('click', function () { syncNow(); });
     $('btn-export').addEventListener('click', exportJson);
@@ -360,6 +379,7 @@
 
     // клик по карте в режиме панорамы
     map.on('click', function (e) {
+      if (isMobile() && document.body.classList.contains('sb-open')) toggleSidebar(false);
       if (Editor.isPicking()) return;
       if (panoOpen) {
         Panorama.show([e.latlng.lat, e.latlng.lng], $('pano'), function (msg) {
@@ -371,6 +391,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') {
         if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+        toggleSidebar(false);
         Editor.startAdd();
       }
     });
