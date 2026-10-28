@@ -3,12 +3,12 @@ window.SignRender = (function () {
 
   var TYPES = {
     no_stopping: {
-      code: '3.27', label: 'Остановка запрещена', color: '#e5383b',
-      width: 5, dash: null, offset: 6.5, sided: true, arrowed: true
+      code: '3.27', label: 'Остановка запрещена', color: '#ff4d6d',
+      width: 5, dash: null, offset: 3.2, sided: true, arrowed: true
     },
     no_parking: {
-      code: '3.28', label: 'Стоянка запрещена', color: '#ff9f1c',
-      width: 5, dash: '10 8', offset: 6.5, sided: true, arrowed: true
+      code: '3.28', label: 'Стоянка запрещена', color: '#ffa94d',
+      width: 5, dash: '10 8', offset: 3.2, sided: true, arrowed: true
     },
     lanes: {
       code: '5.15.1', label: 'Движение по полосам', color: '#3a86ff',
@@ -88,14 +88,34 @@ window.SignRender = (function () {
       'kng-arrow');
   }
 
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  // Название улицы: подпись под значком. Считается один раз на объект знака.
+  var streetCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function streetOf(sign) {
+    var s;
+    if (streetCache) {
+      s = streetCache.get(sign);
+      if (s !== undefined) return s;
+    }
+    s = (window.Roads && sign.path && sign.path[0]) ? (Roads.streetNameAt(sign.path[0]) || '') : '';
+    if (streetCache) streetCache.set(sign, s);
+    return s;
+  }
+
   // Значок на карте — миниатюра настоящего знака (3.27 / 3.28 / 5.15.1 / 3.24)
-  function signBadge(sign) {
-    var T = TYPES[sign.type];
-    if (!T) return null;
+  // плюс подпись с улицей и, если знаки слиплись, счётчик «+N».
+  function badgeHtml(sign, street, extra) {
     var size = sign.type === 'lanes' ? 30 : 26;
     var html = '<div class="kng-sign-wrap' + (sign.zone ? ' has-zone' : '') + '" data-id="' + sign.id + '">' +
-      SignSVG.marker(sign, size) + '</div>';
-    return icon(html, 'kng-sign-mk', size);
+      SignSVG.marker(sign, size);
+    if (street) html += '<span class="kng-lbl">' + esc(street) + '</span>';
+    if (extra > 0) html += '<span class="kng-more">+' + extra + '</span>';
+    return html + '</div>';
   }
 
   function speedBadge(v) {
@@ -283,22 +303,91 @@ window.SignRender = (function () {
     }
   }
 
-  // Бейдж ставим чуть в стороне от полосы, чтобы не закрывать её
-  function drawStartBadge(sign, group) {
-    var b = signBadge(sign);
-    if (!b) return;
+  // Где рисовать значок: в начале зоны, чуть в сторону полосы, но на асфальте
+  function badgeFor(sign) {
+    if (!TYPES[sign.type] || !sign.path || sign.path.length < 2) return null;
     var p = sign.path[0];
     var b0 = Geo.bearing(sign.path[0], sign.path[Math.min(2, sign.path.length - 1)]) || 0;
-    var shift = sign.type === 'speed' ? -11 : -9;
-    var pos = lateral(p, sign.direction === 'backward' ? b0 + 180 : b0, shift);
-    L.marker(pos, { icon: b, interactive: false, keyboard: false, zIndexOffset: 360 }).addTo(group);
+    var side = sign.type === 'lanes' || sign.type === 'speed' ? 0 : (sign.side === 'left' ? -1.6 : 1.6);
+    var pos = lateral(p, sign.direction === 'backward' ? b0 + 180 : b0, side);
+    return {
+      sign: sign, pos: pos, street: streetOf(sign),
+      size: sign.type === 'lanes' ? 30 : 26,
+      w: sign.type === 'lanes' ? 30 : 26
+    };
   }
 
-  function render(group, signs, filters, map, detail, speedDetail) {
+  // Оценка ширины подписи (10px 600 + padding 7px с каждой стороны)
+  function labelWidth(text) {
+    return Math.min(196, Math.round(String(text).length * 6.4) + 16);
+  }
+
+  function overlap(a, b, pad) {
+    var p = pad || 0;
+    return a.x1 - p < b.x2 && a.x2 + p > b.x1 && a.y1 - p < b.y2 && a.y2 + p > b.y1;
+  }
+
+  // Раскладка значков: соседние не наезжают друг на друга — слипаются в один
+  // со счётчиком «+N» (клик приближает). Подписи улиц добавляют ширину.
+  function placeBadges(list, group, map, labels) {
+    var keep = [];
+    var rx = labels ? 76 : 25, ry = labels ? 24 : 22;
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      var pt;
+      try { pt = map.latLngToContainerPoint(b.pos); } catch (e) { pt = { x: 0, y: 0 }; }
+      var merged = false;
+      for (var k = 0; k < keep.length; k++) {
+        if (Math.abs(pt.x - keep[k].pt.x) < rx && Math.abs(pt.y - keep[k].pt.y) < ry) {
+          keep[k].extra++;
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) keep.push({ pt: pt, b: b, extra: 0 });
+    }
+
+    // Второй проход: подписи улиц не должны налезать ни друг на друга,
+    // ни на соседние значки — при конфликте подпись просто не показываем.
+    var badgeRects = keep.map(function (k) {
+      var half = k.b.size / 2 + 2;
+      return { x1: k.pt.x - half, x2: k.pt.x + half, y1: k.pt.y - half, y2: k.pt.y + half, own: k };
+    });
+    var labelRects = [];
+    keep.forEach(function (k) {
+      k.label = '';
+      if (!labels || !k.b.street) return;
+      var w = labelWidth(k.b.street), h = 20;
+      var top = k.pt.y + k.b.size / 2 + 1;
+      var rect = { x1: k.pt.x - w / 2, x2: k.pt.x + w / 2, y1: top, y2: top + h };
+      var clash = labelRects.some(function (r) { return overlap(rect, r, 2); }) ||
+        badgeRects.some(function (r) { return r.own !== k && overlap(rect, r, 1); });
+      if (!clash) { labelRects.push(rect); k.label = k.b.street; }
+    });
+
+    keep.forEach(function (k) {
+      var mk = L.marker(k.b.pos, {
+        icon: icon(badgeHtml(k.b.sign, k.label, k.extra), 'kng-sign-mk', k.b.size),
+        keyboard: false,
+        zIndexOffset: 360
+      });
+      if (k.extra > 0) {
+        mk.bindTooltip('ещё ' + k.extra + ' — приблизить', { direction: 'top', className: 'kng-tip' });
+        mk.on('click', function (e) {
+          L.DomEvent.stopPropagation(e);
+          map.setView(k.b.pos, Math.min(map.getZoom() + 2, map.getMaxZoom()));
+        });
+      }
+      mk.addTo(group);
+    });
+  }
+
+  function render(group, signs, filters, map, detail, speedDetail, opts) {
     if (detail === undefined) detail = true;
     if (speedDetail === undefined) speedDetail = true;
+    opts = opts || {};
     group.clearLayers();
-    var shown = 0;
+    var shown = 0, badges = [];
     for (var i = 0; i < signs.length; i++) {
       var s = signs[i];
       if (!matchFilters(s, filters)) continue;
@@ -308,10 +397,12 @@ window.SignRender = (function () {
         drawChevrons(s, group);
         drawLaneArrows(s, group);
         if (speedDetail) drawSpeedBadges(s, group);
-        drawStartBadge(s, group);
+        var b = badgeFor(s);
+        if (b) badges.push(b);
       }
       shown++;
     }
+    if (detail && badges.length) placeBadges(badges, group, map, !!opts.labels);
     return shown;
   }
 
@@ -322,6 +413,7 @@ window.SignRender = (function () {
     speedColor: speedColor, typeColor: typeColor,
     render: render, popupHtml: popupHtml, matchFilters: matchFilters,
     zonesText: zonesText, drawStripes: drawStripes, drawChevrons: drawChevrons,
-    drawLaneArrows: drawLaneArrows, drawSpeedBadges: drawSpeedBadges, drawStartBadge: drawStartBadge
+    drawLaneArrows: drawLaneArrows, drawSpeedBadges: drawSpeedBadges,
+    streetOf: streetOf, badgeFor: badgeFor
   };
 })();

@@ -5,6 +5,7 @@
   var filters = { types: {}, timeOnly: false, speeds: {} };
   var renderedCount = 0;
   var panoOpen = false;
+  var labelsOn = true;
 
   function $(id) { return document.getElementById(id); }
 
@@ -153,8 +154,10 @@
       rafPending = 0;
       var z = map.getZoom();
       var detail = z >= DETAIL_ZOOM;
-      // цифры скорости — самая шумная часть: показываем только с z16
-      renderedCount = SignRender.render(signsGroup, signs, filters, map, detail, z >= 16);
+      // цифры скорости и подписи улиц — самая шумная часть: показываем с z16
+      renderedCount = SignRender.render(signsGroup, signs, filters, map, detail, z >= 16, {
+        labels: labelsOn && z >= 16
+      });
       $('shown-count').textContent = renderedCount + ' из ' + signs.length;
       if (window.Panorama) Panorama.setSigns(signs, filters);
     });
@@ -334,6 +337,11 @@
     });
     $('chk-roads').addEventListener('change', function (e) {
       if (e.target.checked) { ensureRoads(); roadsGroup.addTo(map); } else map.removeLayer(roadsGroup);
+    });
+    var namesChk = $('chk-names');
+    if (namesChk) namesChk.addEventListener('change', function () {
+      labelsOn = namesChk.checked;
+      rerender();
     });
 
     var pwBtn = $('btn-admin');
