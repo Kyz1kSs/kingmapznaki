@@ -15,7 +15,8 @@
       minZoom: window.CONFIG.minZoom,
       maxZoom: window.CONFIG.maxZoom,
       zoomControl: false,
-      attributionControl: true
+      attributionControl: true,
+      preferCanvas: true          // все полосы идут через canvas — заметно быстрее
     });
 
     L.tileLayer(window.CONFIG.esriImagery, {
@@ -41,11 +42,18 @@
     // дорожная сеть уже в data/roads.js — работает и через file://, и на Pages
     if (window.ROADS_DATA) {
       Roads.build(window.ROADS_DATA);
-      buildRoadLayer();
+      // 520 линий сетки строим только когда её включают в сайдбаре
     } else {
       setStatus('Не загрузилась дорожная сеть (data/roads.js)', true);
     }
     return Promise.resolve();
+  }
+
+  var roadsBuilt = false;
+  function ensureRoads() {
+    if (roadsBuilt) return;
+    roadsBuilt = true;
+    buildRoadLayer();
   }
 
   function buildRoadLayer() {
@@ -100,13 +108,16 @@
       sw.style.background = key === 'speed'
         ? 'linear-gradient(90deg,#d00000,#f48c06,#ffd60a,#8ac926)'
         : T.color;
+      var ico = document.createElement('span');
+      ico.className = 'f-ico';
+      ico.innerHTML = SignRender.face({ type: key, speed: 40, lanes: [{ turn: 'left' }, { turn: 'right' }] });
       var name = document.createElement('span');
       name.className = 'f-name';
       name.textContent = T.code + ' ' + T.label;
       var cnt = document.createElement('span');
       cnt.className = 'f-count';
       cnt.textContent = count;
-      row.appendChild(cb); row.appendChild(sw); row.appendChild(name); row.appendChild(cnt);
+      row.appendChild(cb); row.appendChild(ico); row.appendChild(name); row.appendChild(cnt);
       box.appendChild(row);
     });
 
@@ -132,16 +143,40 @@
 
   var DETAIL_ZOOM = 15;   // ниже этого зума рисуем только полосы, без значков и стрелок
 
+  // Перерисовка через requestAnimationFrame: при быстрых кликах/зуме
+  // не рисуем один и тот же кадр по нескольку раз
+  var rafPending = 0;
   function rerender() {
-    var detail = map.getZoom() >= DETAIL_ZOOM;
-    renderedCount = SignRender.render(signsGroup, signs, filters, map, detail);
-    $('shown-count').textContent = renderedCount + ' из ' + signs.length;
+    if (rafPending) return;
+    rafPending = requestAnimationFrame(function () {
+      rafPending = 0;
+      var z = map.getZoom();
+      var detail = z >= DETAIL_ZOOM;
+      // цифры скорости — самая шумная часть: показываем только с z16
+      renderedCount = SignRender.render(signsGroup, signs, filters, map, detail, z >= 16);
+      $('shown-count').textContent = renderedCount + ' из ' + signs.length;
+      if (window.Panorama) Panorama.setSigns(signs, filters);
+    });
+  }
+
+  var filterSig = null;
+  function filtersSignature(list) {
+    var c = {};
+    for (var i = 0; i < list.length; i++) c[list[i].type] = (c[list[i].type] || 0) + 1;
+    var sp = {};
+    for (var j = 0; j < list.length; j++) {
+      var s = list[j];
+      if (s.type === 'speed') sp[s.speed] = (sp[s.speed] || 0) + 1;
+    }
+    return JSON.stringify([c, sp, list.length]);
   }
 
   function onDataChanged(list) {
     signs = list;
-    buildFilters();
+    var sig = filtersSignature(list);
+    if (sig !== filterSig) { filterSig = sig; buildFilters(); }
     rerender();
+    updateAdminUi();
     setStatus(statusText(), !!Store.lastError());
     var t = new Date();
     var stamp = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
@@ -163,6 +198,41 @@
     });
   }
 
+  // ---------- админ ----------
+
+  function adminLogin(pw) {
+    pw = (pw || '').trim();
+    var st = $('admin-status');
+    if (!pw) { if (st) st.textContent = 'введи пароль'; return; }
+    if (st) st.textContent = 'проверяю…';
+    Store.loginAdmin(pw).then(function () {
+      if (st) st.textContent = 'админ-режим включён';
+      var inp = $('admin-pw');
+      if (inp) inp.value = '';
+      rerender();
+    }).catch(function (e) {
+      var msg = String(e.message || e);
+      if (/PGRST202|does not exist|Could not find/i.test(msg)) {
+        if (st) st.textContent = 'нет доступа: сначала выполни SQL из supabase-admin.sql';
+      } else {
+        if (st) st.textContent = 'не пустило: ' + msg.replace(/^HTTP \d+: /, '').slice(0, 120);
+      }
+    });
+  }
+
+  function updateAdminUi() {
+    var on = Store.isAdmin();
+    var sec = $('admin-sec');
+    if (!sec) return;
+    var login = $('admin-login');
+    var out = $('admin-out');
+    var st = $('admin-status');
+    if (login) login.hidden = on;
+    if (out) out.hidden = !on;
+    if (st && on) st.textContent = 'админ-режим: можно удалять любые участки';
+    sec.classList.toggle('is-admin', on);
+  }
+
   // ---------- панорама ----------
 
   function togglePano(force) {
@@ -171,6 +241,7 @@
     $('btn-pano').classList.toggle('on', panoOpen);
     if (!panoOpen) { Panorama.destroy(); return; }
     var c = map.getCenter();
+    Panorama.setSigns(signs, filters);
     Panorama.show([c.lat, c.lng], $('pano'), function (msg) {
       $('pano-info').textContent = msg;
     });
@@ -210,6 +281,10 @@
       try {
         var data = JSON.parse(fr.result);
         if (!Array.isArray(data)) throw new Error('ожидался массив знаков');
+        if (Store.isOnline() && !Store.isAdmin()) {
+          alert('Импорт перезаписывает общую базу целиком — это доступно только в админ-режиме.');
+          return;
+        }
         if (!confirm('Заменить все текущие данные (' + signs.length + ' участков) на ' + data.length + ' из файла?')) return;
         Store.replaceAll(data).then(function () { setStatus(statusText(), false); });
       } catch (e) {
@@ -239,8 +314,19 @@
       if (e.target.checked) labelsLayer.addTo(map); else map.removeLayer(labelsLayer);
     });
     $('chk-roads').addEventListener('change', function (e) {
-      if (e.target.checked) roadsGroup.addTo(map); else map.removeLayer(roadsGroup);
+      if (e.target.checked) { ensureRoads(); roadsGroup.addTo(map); } else map.removeLayer(roadsGroup);
     });
+
+    var pwBtn = $('btn-admin');
+    if (pwBtn) pwBtn.addEventListener('click', function () { adminLogin($('admin-pw').value); });
+    var outBtn = $('btn-admin-out');
+    if (outBtn) outBtn.addEventListener('click', function () { Store.logoutAdmin(); });
+    var pwInput = $('admin-pw');
+    if (pwInput) pwInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') adminLogin(pwInput.value); });
+    var panoPrev = $('pano-prev');
+    if (panoPrev) panoPrev.addEventListener('click', function () { Panorama.step(false); });
+    var panoNext = $('pano-next');
+    if (panoNext) panoNext.addEventListener('click', function () { Panorama.step(true); });
     $('chk-time').addEventListener('change', function (e) {
       filters.timeOnly = e.target.checked;
       rerender();
@@ -263,7 +349,9 @@
       } else if (btn.getAttribute('data-act') === 'del') {
         if (confirm('Удалить этот участок?')) {
           map.closePopup();
-          Editor.removeSign(id);
+          Editor.removeSign(id).catch(function (e) {
+            alert('Не удалилось: ' + String(e.message || e));
+          });
         }
       }
     });

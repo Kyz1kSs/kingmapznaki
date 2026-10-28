@@ -148,6 +148,50 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 }
 .kng-code.has-zone::after { content: "⏱"; margin-left: 3px; font-size: 9px; }
 
+/* миниатюры настоящих знаков */
+.kng-sign { filter: drop-shadow(0 1px 3px #000c); line-height: 0; }
+.kng-sign svg { display: block; }
+/* .kng-sign-wrap живёт внутри маркера; сам маркер (.kng-sign-mk) обязан
+   оставаться position:absolute — иначе Leaflet перестаёт его двигать */
+.kng-sign-mk { background: none; border: 0; }
+.kng-sign-wrap { position: relative; }
+.kng-sign-wrap.has-zone::after {
+  content: "⏱"; position: absolute; right: -4px; top: -3px;
+  font-size: 9px; color: #ffd60a; text-shadow: 0 1px 2px #000;
+}
+.f-ico { width: 18px; height: 18px; flex: 0 0 auto; line-height: 0; }
+.f-ico svg { display: block; }
+
+/* знак в карточке и в панораме */
+.pop-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 6px; }
+.pop-sign { width: 58px; height: 58px; flex: 0 0 auto; }
+.pop-sign svg { display: block; }
+.pop-txt { flex: 1 1 auto; min-width: 0; }
+.pop-txt .pop-h { margin-bottom: 3px; }
+
+/* админ */
+#admin-sec.is-admin .sb-title { color: var(--ok); }
+#admin-sec .row { margin-top: 6px; }
+#admin-sec .row input { flex: 1 1 auto; }
+.tight-btn { flex: 0 0 auto; padding: 6px 10px; }
+#admin-status { min-height: 0; }
+
+/* панорама: наш слой поверх кадра */
+.pano-nav { display: flex; align-items: center; gap: 2px; }
+.pano-nav button { padding: 0 6px; font-size: 14px; line-height: 1.4; }
+.pano-ov { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.pano-svg { position: absolute; inset: 0; }
+.pano-sign {
+  position: absolute; line-height: 0;
+  filter: drop-shadow(0 2px 6px #000b);
+}
+.pano-sign svg { display: block; width: 100%; height: auto; }
+.pano-sign-t {
+  position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  margin-top: 2px; font: 600 10px/1.2 "Segoe UI", Arial, sans-serif; color: #fff;
+  background: #0b0f13cc; border-radius: 4px; padding: 1px 4px; white-space: nowrap;
+}
+
 /* ---------- попап ---------- */
 
 .leaflet-popup-content-wrapper {

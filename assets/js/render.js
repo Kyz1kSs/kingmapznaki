@@ -2,13 +2,13 @@
 window.SignRender = (function () {
 
   var TYPES = {
-    no_parking: {
-      code: '3.27', label: 'Стоянка запрещена', color: '#ff9f1c',
-      width: 5, dash: '10 8', offset: 6.5, sided: true, arrowed: true
-    },
     no_stopping: {
-      code: '3.28', label: 'Остановка запрещена', color: '#e5383b',
+      code: '3.27', label: 'Остановка запрещена', color: '#e5383b',
       width: 5, dash: null, offset: 6.5, sided: true, arrowed: true
+    },
+    no_parking: {
+      code: '3.28', label: 'Стоянка запрещена', color: '#ff9f1c',
+      width: 5, dash: '10 8', offset: 6.5, sided: true, arrowed: true
     },
     lanes: {
       code: '5.15.1', label: 'Движение по полосам', color: '#3a86ff',
@@ -42,10 +42,12 @@ window.SignRender = (function () {
   }
 
   function icon(html, cls, size) {
+    var sz = typeof size === 'number' ? [size, size] : (size || null);
     return L.divIcon({
       className: 'kng-mk ' + (cls || ''),
       html: html,
-      iconSize: size || null
+      iconSize: sz,
+      iconAnchor: sz ? [sz[0] / 2, sz[1] / 2] : null
     });
   }
 
@@ -86,18 +88,18 @@ window.SignRender = (function () {
       'kng-arrow');
   }
 
-  function speedBadge(v) {
-    return icon('<div class="kng-speed" style="border-color:' + speedColor(v) + '">' + v + '</div>', 'kng-speed-wrap');
-  }
-
+  // Значок на карте — миниатюра настоящего знака (3.27 / 3.28 / 5.15.1 / 3.24)
   function signBadge(sign) {
     var T = TYPES[sign.type];
     if (!T) return null;
-    if (sign.type === 'speed') return speedBadge(sign.speed == null ? 60 : sign.speed);
-    var label = T.code;
-    var cls = 'kng-code';
-    if (sign.zone) cls += ' has-zone';
-    return icon('<div class="' + cls + '" style="background:' + typeColor(sign) + '">' + label + '</div>', 'kng-code-wrap');
+    var size = sign.type === 'lanes' ? 30 : 26;
+    var html = '<div class="kng-sign-wrap' + (sign.zone ? ' has-zone' : '') + '" data-id="' + sign.id + '">' +
+      SignSVG.marker(sign, size) + '</div>';
+    return icon(html, 'kng-sign-mk', size);
+  }
+
+  function speedBadge(v) {
+    return icon(SignSVG.marker({ type: 'speed', speed: v }, 26), 'kng-sign-mk', 26);
   }
 
   function zonesText(zone) {
@@ -125,6 +127,16 @@ window.SignRender = (function () {
     }).join(', ');
   }
 
+  // Кэш сдвига полосы к бордюру: геометрия знака не меняется между перерисовками
+  var offsetCache = new WeakMap();
+  function shifted(sign, meters) {
+    if (!meters) return sign.path;
+    var bySide = offsetCache.get(sign);
+    if (!bySide) { bySide = {}; offsetCache.set(sign, bySide); }
+    if (!bySide[meters]) bySide[meters] = Geo.offsetPath(sign.path, meters);
+    return bySide[meters];
+  }
+
   function popupHtml(sign) {
     var T = TYPES[sign.type] || {};
     var len = Geo.pathLength(sign.path || []);
@@ -138,16 +150,24 @@ window.SignRender = (function () {
     if (sign.type === 'speed' && sign.speed != null) rows.push(sign.speed + ' км/ч');
     var zt = zonesText(sign.zone);
     if (zt) rows.push('⏱ ' + zt);
+    var liked = Store.canDelete(sign);
     var html = '<div class="pop">' +
-      '<div class="pop-h"><span class="dot" style="background:' + typeColor(sign) + '"></span>' +
-      '<b>' + T.code + '</b> ' + T.label + '</div>';
+      '<div class="pop-top">' +
+        '<div class="pop-sign">' + SignSVG.face(sign) + '</div>' +
+        '<div class="pop-txt">' +
+          '<div class="pop-h"><b>' + T.code + '</b> ' + T.label + '</div>';
     for (var i = 0; i < rows.length; i++) html += '<div class="pop-row">' + rows[i] + '</div>';
+    html += '</div></div>';
     if (sign.note) html += '<div class="pop-row pop-note">' + sign.note + '</div>';
     if (sign.author) html += '<div class="pop-row pop-auth">добавил: ' + sign.author + '</div>';
     html += '<div class="pop-btns">' +
-      '<button data-act="edit" data-id="' + sign.id + '">Изменить</button>' +
-      '<button data-act="del" data-id="' + sign.id + '" class="danger">Удалить</button>' +
-      '</div></div>';
+      '<button data-act="edit" data-id="' + sign.id + '">Изменить</button>';
+    if (liked) {
+      html += '<button data-act="del" data-id="' + sign.id + '" class="danger">Удалить</button>';
+    } else {
+      html += '<button disabled title="Удалять чужие правки может только админ">Удалить</button>';
+    }
+    html += '</div></div>';
     return html;
   }
 
@@ -169,7 +189,7 @@ window.SignRender = (function () {
     } else sides = [0];
 
     sides.forEach(function (sgn) {
-      var path = T.offset ? Geo.offsetPath(sign.path, sgn * T.offset) : sign.path;
+      var path = T.offset ? shifted(sign, sgn * T.offset) : sign.path;
       // тёмная подложка для контраста на светлом спутнике
       L.polyline(path, {
         color: '#000', weight: T.width + 3, opacity: 0.35, interactive: false, lineCap: 'round'
@@ -249,6 +269,8 @@ window.SignRender = (function () {
 
   function drawSpeedBadges(sign, group) {
     if (sign.type !== 'speed') return;
+    var len0 = Geo.pathLength(sign.path);
+    if (len0 < 25) return;
     var len = Geo.pathLength(sign.path);
     var count = Math.min(5, Math.max(1, Math.round(len / 90)));
     for (var i = 0; i < count; i++) {
@@ -272,8 +294,9 @@ window.SignRender = (function () {
     L.marker(pos, { icon: b, interactive: false, keyboard: false, zIndexOffset: 360 }).addTo(group);
   }
 
-  function render(group, signs, filters, map, detail) {
+  function render(group, signs, filters, map, detail, speedDetail) {
     if (detail === undefined) detail = true;
+    if (speedDetail === undefined) speedDetail = true;
     group.clearLayers();
     var shown = 0;
     for (var i = 0; i < signs.length; i++) {
@@ -284,7 +307,7 @@ window.SignRender = (function () {
       if (detail) {
         drawChevrons(s, group);
         drawLaneArrows(s, group);
-        drawSpeedBadges(s, group);
+        if (speedDetail) drawSpeedBadges(s, group);
         drawStartBadge(s, group);
       }
       shown++;
@@ -292,8 +315,10 @@ window.SignRender = (function () {
     return shown;
   }
 
+  function face(sign, opts) { return SignSVG.face(sign, opts); }
+
   return {
-    TYPES: TYPES, LANE_TURNS: LANE_TURNS,
+    TYPES: TYPES, LANE_TURNS: LANE_TURNS, face: face,
     speedColor: speedColor, typeColor: typeColor,
     render: render, popupHtml: popupHtml, matchFilters: matchFilters,
     zonesText: zonesText, drawStripes: drawStripes, drawChevrons: drawChevrons,

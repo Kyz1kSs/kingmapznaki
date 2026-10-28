@@ -49,6 +49,21 @@
         <label class="f-row small"><input type="checkbox" id="chk-roads"> сетка улиц</label>
       </section>
 
+      <section class="sb-sec" id="admin-sec">
+        <div class="sb-title">Админ <span class="shown" id="admin-badge"></span></div>
+        <div id="admin-login">
+          <p class="help">Удалять чужие участки может только админ. Свои правки ты можешь удалить без пароля.</p>
+          <div class="row">
+            <input id="admin-pw" type="password" placeholder="пароль админа" autocomplete="current-password">
+            <button id="btn-admin" class="tight-btn">Войти</button>
+          </div>
+        </div>
+        <div id="admin-out" hidden>
+          <button id="btn-admin-out">Выйти из админ-режима</button>
+        </div>
+        <p class="help" id="admin-status"></p>
+      </section>
+
       <section class="sb-sec">
         <div class="sb-title">Данные</div>
         <div class="row">
@@ -68,7 +83,8 @@
         <div class="sb-title">Как это работает</div>
         <p>Спутник — Esri. Участки рисуются полосой вдоль бордюра: клик по полосе открывает карточку, там же правка и удаление.</p>
         <p>Правки видны всем: они уходят в общую базу и раз в 30 секунд подтягиваются сами. Сайт можно установить как приложение — в меню браузера «Установить приложение» (на iPhone: «Поделиться» → «На экран «Домой»»).</p>
-        <p>Кнопка «Панорама» открывает панораму Яндекса в точке — удобно проверять знаки, не переключая вкладки. «Яндекс ↗» открывает это же место на спутнике Яндекса, там снимки чётче.</p>
+        <p>Кнопка «Панорама» открывает кадр Яндекса прямо в окне, а поверх него рисуются те же полосы знаков: видно, где зона начинается и сколько тянется. Кнопки «←» и «→» шагают по улице.</p>
+        <p>«Яндекс ↗» открывает это же место на спутнике Яндекса — там снимки чётче, чем на Esri.</p>
       </section>
     </div>
   </aside>
@@ -86,7 +102,11 @@
     <div id="pano-wrap" hidden>
       <div class="pano-head">
         <span id="pano-info">Панорама</span>
-        <button id="pano-close" title="Закрыть">×</button>
+        <span class="pano-nav">
+          <button id="pano-prev" title="Шаг назад по улице">←</button>
+          <button id="pano-next" title="Шаг вперёд по улице">→</button>
+          <button id="pano-close" title="Закрыть">×</button>
+        </span>
       </div>
       <div id="pano"></div>
     </div>
@@ -182,6 +202,7 @@
 <script src="assets/js/roads.js"></script>
 <script src="data/roads.js"></script>
 <script src="assets/js/store.js"></script>
+<script src="assets/js/signs-svg.js"></script>
 <script src="assets/js/render.js"></script>
 <script src="assets/js/panorama.js"></script>
 <script src="assets/js/editor.js"></script>

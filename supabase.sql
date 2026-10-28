@@ -11,6 +11,7 @@ create table if not exists public.signs (
   zone        jsonb,                   -- {"from":"08:00","to":"20:00","days":"even"}
   note        text default '',
   author      text default '',
+  owner_token text,                    -- кто нарисовал; см. supabase-admin.sql
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
 );

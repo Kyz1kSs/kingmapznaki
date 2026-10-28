@@ -1,4 +1,9 @@
-/* Хранилище знаков: Supabase (если настроен) или локальный режим с экспортом в JSON. */
+/* Хранилище знаков: Supabase (если настроен) или локальный режим с экспортом в JSON.
+
+   Удаление устроено так: прямой DELETE в таблице закрыт, а удаляет серверная
+   функция delete_sign(id, owner_token, admin_password). Она разрешает удалить
+   свою запись (совпал owner_token) или любую — если пароль совпал с админским.
+   Пароль админа хранится в базе в виде sha256-хэша и в исходники не попадает. */
 window.Store = (function () {
   var signs = [];
   var subs = [];
@@ -6,7 +11,10 @@ window.Store = (function () {
   var online = !!(cfg.url && cfg.anonKey);
   var table = cfg.table || 'signs';
   var LOCAL_KEY = 'kng_signs_v1';
+  var OWNER_KEY = 'kng_owner';
+  var ADMIN_KEY = 'kng_admin_pw';
   var lastError = null;
+  var rpcMissing = false;
 
   function emit() { subs.forEach(function (f) { f(signs.slice()); }); }
 
@@ -20,15 +28,79 @@ window.Store = (function () {
     return h;
   }
 
+  function base() { return cfg.url.replace(/\/$/, ''); }
+
   function api(path, opts) {
     opts = opts || {};
     opts.headers = headers(opts.headers);
-    return fetch(cfg.url.replace(/\/$/, '') + '/rest/v1/' + table + path, opts)
+    return fetch(base() + '/rest/v1/' + table + path, opts)
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 300)); });
         return r.status === 204 ? null : r.json();
       });
   }
+
+  function rpc(fn, body) {
+    return fetch(base() + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) {
+          var e = new Error('HTTP ' + r.status + ': ' + t.slice(0, 300));
+          e.status = r.status;
+          e.body = t;
+          throw e;
+        }
+        return t ? JSON.parse(t) : null;
+      });
+    });
+  }
+
+  // ---------- кто есть кто ----------
+
+  function ownerToken() {
+    var t = null;
+    try { t = localStorage.getItem(OWNER_KEY); } catch (e) {}
+    if (!t) {
+      t = (crypto.randomUUID ? crypto.randomUUID() : 'o' + Date.now().toString(16) + Math.random().toString(16).slice(2));
+      try { localStorage.setItem(OWNER_KEY, t); } catch (e) {}
+    }
+    return t;
+  }
+
+  var adminPassword = null;
+  try { adminPassword = localStorage.getItem(ADMIN_KEY); } catch (e) {}
+
+  function isAdmin() { return !!adminPassword; }
+
+  // Проверяем пароль на сервере (сравнение с хэшем в базе).
+  function loginAdmin(password) {
+    if (!online) return Promise.reject(new Error('нет онлайн-базы'));
+    return rpc('is_admin', { p_password: password }).then(function (ok) {
+      if (!ok) throw new Error('неверный пароль');
+      adminPassword = password;
+      try { localStorage.setItem(ADMIN_KEY, password); } catch (e) {}
+      emit();
+      return true;
+    });
+  }
+
+  function logoutAdmin() {
+    adminPassword = null;
+    try { localStorage.removeItem(ADMIN_KEY); } catch (e) {}
+    emit();
+  }
+
+  // Может ли текущий посетитель удалить этот знак
+  function canDelete(sign) {
+    if (!online) return true;
+    if (isAdmin()) return true;
+    return !!(sign && sign.ownerToken && sign.ownerToken === ownerToken());
+  }
+
+  // ---------- данные ----------
 
   function fromRow(r) {
     return {
@@ -42,6 +114,7 @@ window.Store = (function () {
       zone: r.zone || null,
       note: r.note || '',
       author: r.author || '',
+      ownerToken: r.owner_token || null,
       updatedAt: r.updated_at || null
     };
   }
@@ -58,6 +131,7 @@ window.Store = (function () {
       zone: s.zone || null,
       note: s.note || '',
       author: s.author || '',
+      owner_token: s.ownerToken || ownerToken(),
       updated_at: new Date().toISOString()
     };
   }
@@ -66,6 +140,7 @@ window.Store = (function () {
     try {
       signs = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
     } catch (e) { signs = []; }
+    signs.forEach(function (s) { if (!s.ownerToken) s.ownerToken = ownerToken(); });
     emit();
     return signs;
   }
@@ -128,7 +203,9 @@ window.Store = (function () {
   function upsert(sign) {
     var now = new Date().toISOString();
     sign.updatedAt = now;
-    var idx = signs.findIndex(function (s) { return s.id === sign.id; });
+    if (!sign.ownerToken) sign.ownerToken = ownerToken();
+    var idx = -1;
+    for (var i = 0; i < signs.length; i++) if (signs[i].id === sign.id) { idx = i; break; }
     if (idx >= 0) signs[idx] = sign; else signs.push(sign);
     emit();
     if (!online) { saveLocal(); return Promise.resolve(sign); }
@@ -145,13 +222,43 @@ window.Store = (function () {
     });
   }
 
+  function knownRpcMissing(e) {
+    var b = (e && (e.body || e.message)) || '';
+    return /PGRST202|does not exist|Could not find the function|404/i.test(b);
+  }
+
   function remove(id) {
-    signs = signs.filter(function (s) { return s.id !== id; });
-    emit();
-    if (!online) { saveLocal(); return Promise.resolve(); }
-    return api('?id=eq.' + encodeURIComponent(id), { method: 'DELETE' }).catch(function (e) {
+    var sign = null;
+    for (var i = 0; i < signs.length; i++) if (signs[i].id === id) sign = signs[i];
+    if (!online) {
+      signs = signs.filter(function (s) { return s.id !== id; });
+      emit(); saveLocal(); return Promise.resolve();
+    }
+    function drop() {
+      signs = signs.filter(function (s) { return s.id !== id; });
+      emit();
+    }
+    if (rpcMissing) {
+      return api('?id=eq.' + encodeURIComponent(id), { method: 'DELETE' }).then(drop).catch(function (e) {
+        lastError = e.message;
+        throw e;
+      });
+    }
+    // основной путь — серверная проверка прав
+    return rpc('delete_sign', {
+      p_id: id,
+      p_token: ownerToken(),
+      p_password: adminPassword || null
+    }).then(function (deleted) {
+      if (!deleted) throw new Error('удалять чужие правки может только админ');
+      drop();
+    }).catch(function (e) {
+      if (knownRpcMissing(e)) {
+        rpcMissing = true;                       // SQL-миграция ещё не применена
+        return remove(id);
+      }
       lastError = e.message;
-      return Promise.reject(e);
+      throw e;
     });
   }
 
@@ -159,7 +266,6 @@ window.Store = (function () {
     signs = list.slice();
     emit();
     if (!online) { saveLocal(); return Promise.resolve(); }
-    // Полная перезапись онлайн-базы: удаляем всё и вставляем заново.
     return api('?id=not.is.null', { method: 'DELETE' })
       .then(function () {
         if (!signs.length) return null;
@@ -183,6 +289,11 @@ window.Store = (function () {
     isOnline: function () { return online; },
     lastError: function () { return lastError; },
     author: author,
-    setAuthor: setAuthor
+    setAuthor: setAuthor,
+    ownerToken: ownerToken,
+    canDelete: canDelete,
+    isAdmin: isAdmin,
+    loginAdmin: loginAdmin,
+    logoutAdmin: logoutAdmin
   };
 })();

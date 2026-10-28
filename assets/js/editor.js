@@ -206,7 +206,7 @@ window.Editor = (function () {
   }
 
   function removeSign(id) {
-    Store.remove(id).then(function () { if (onChange) onChange(); });
+    return Store.remove(id).then(function () { if (onChange) onChange(); });
   }
 
   function init(mapRef, previewGroup, changeCb) {

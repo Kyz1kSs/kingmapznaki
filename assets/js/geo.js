@@ -86,6 +86,14 @@ window.Geo = (function () {
     return pts[pts.length - 1];
   }
 
+  // Точка на расстоянии meters по пеленгу bearing от p
+  function dest(p, bearing, meters) {
+    var d = meters / R, b = bearing * D2R, la1 = p[0] * D2R, lo1 = p[1] * D2R;
+    var la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(b));
+    var lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+    return [la2 / D2R, lo2 / D2R];
+  }
+
   function fmtLen(m) {
     if (m < 950) return Math.round(m) + ' м';
     return (m / 1000).toFixed(m < 9500 ? 1 : 0).replace('.', ',') + ' км';
@@ -93,6 +101,6 @@ window.Geo = (function () {
 
   return {
     hav: hav, pathLength: pathLength, bearing: bearing,
-    offsetPath: offsetPath, sampleAlong: sampleAlong, pointAt: pointAt, fmtLen: fmtLen
+    offsetPath: offsetPath, sampleAlong: sampleAlong, pointAt: pointAt, fmtLen: fmtLen, dest: dest
   };
 })();
