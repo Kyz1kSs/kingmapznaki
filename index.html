@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Знаки Кингисеппа — карта</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Карта дорожных знаков Кингисеппа: стоянка и остановка запрещена, движение по полосам, ограничения скорости.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23e5383b'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23fff'/%3E%3Ctext x='16' y='21.5' font-size='14' font-family='Arial' font-weight='bold' text-anchor='middle' fill='%23111'%3E40%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/vendor/leaflet.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="sb-head">
+      <h1>Знаки Кингисеппа</h1>
+      <p class="sub" id="storage-status">загрузка…</p>
+    </div>
+
+    <div class="sb-scroll">
+      <section class="sb-sec">
+        <div class="sb-title">Слои знаков <span class="shown" id="shown-count">0</span></div>
+        <div id="filters"></div>
+
+        <div id="speed-filters-wrap" hidden>
+          <div class="sb-sub">Ограничения скорости</div>
+          <div id="speed-filters" class="chips"></div>
+        </div>
+
+        <label class="f-row small"><input type="checkbox" id="chk-time"> только с ограничением по времени</label>
+      </section>
+
+      <section class="sb-sec">
+        <div class="sb-title">Добавить участок</div>
+        <button id="btn-add" class="primary">+ Нарисовать на карте <kbd>A</kbd></button>
+        <p class="help">Первый клик — начало участка, второй — конец. Знак ляжет точно вдоль улицы. Esc — отмена.</p>
+      </section>
+
+      <section class="sb-sec">
+        <div class="sb-title">Подложка</div>
+        <label class="f-row small"><input type="checkbox" id="chk-labels" checked> подписи улиц</label>
+        <label class="f-row small"><input type="checkbox" id="chk-roads"> сетка улиц</label>
+      </section>
+
+      <section class="sb-sec">
+        <div class="sb-title">Данные</div>
+        <div class="row">
+          <button id="btn-export">Экспорт JSON</button>
+          <button id="btn-import">Импорт</button>
+        </div>
+        <label class="f-row small col">Кто правит
+          <input id="author" placeholder="твоё имя — попадёт в карточку знака">
+        </label>
+      </section>
+
+      <section class="sb-sec sb-help">
+        <div class="sb-title">Как это работает</div>
+        <p>Спутник — Esri. Участки рисуются полосой вдоль бордюра: клик по полосе открывает карточку, там же правка и удаление.</p>
+        <p>Кнопка «Панорама» открывает панораму Яндекса в точке — удобно проверять знаки, не переключая вкладки. «Яндекс ↗» открывает это же место на спутнике Яндекса, там снимки чётче.</p>
+      </section>
+    </div>
+  </aside>
+
+  <main id="map-wrap">
+    <div id="map"></div>
+
+    <div id="hint" class="hint" hidden></div>
+
+    <div class="fab-col">
+      <button id="btn-pano" class="fab">Панорама</button>
+      <button id="btn-ymaps" class="fab secondary" title="Открыть это место в Яндекс.Картах на спутнике">Яндекс ↗</button>
+    </div>
+
+    <div id="pano-wrap" hidden>
+      <div class="pano-head">
+        <span id="pano-info">Панорама</span>
+        <button id="pano-close" title="Закрыть">×</button>
+      </div>
+      <div id="pano"></div>
+    </div>
+
+    <!-- карточка создания / правки участка -->
+    <form id="editor" hidden autocomplete="off">
+      <div class="ed-head">
+        <b id="ed-title">Новый участок</b>
+        <button type="button" id="ed-close" title="Закрыть">×</button>
+      </div>
+
+      <div class="ed-body">
+        <label class="ed-field">Тип знака
+          <select id="ed-type">
+            <option value="no_parking">3.27 — стоянка запрещена</option>
+            <option value="no_stopping">3.28 — остановка запрещена</option>
+            <option value="lanes">5.15.1 — движение по полосам</option>
+            <option value="speed">3.24 — ограничение скорости</option>
+          </select>
+        </label>
+
+        <div class="ed-row" id="ed-side-row">
+          <label class="ed-field">Сторона
+            <select id="ed-side">
+              <option value="right">правая по ходу</option>
+              <option value="left">левая по ходу</option>
+              <option value="both">обе стороны</option>
+            </select>
+          </label>
+          <label class="ed-field">Действует
+            <select id="ed-direction">
+              <option value="forward">по линии</option>
+              <option value="backward">против линии</option>
+              <option value="both">в обе стороны</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="ed-field" id="ed-speed-row">Скорость, км/ч
+          <input id="ed-speed" type="number" min="5" max="130" step="5" value="40" list="speed-opts">
+          <datalist id="speed-opts">
+            <option>20</option><option>30</option><option>40</option><option>50</option>
+            <option>60</option><option>70</option><option>90</option>
+          </datalist>
+        </label>
+
+        <div id="ed-lanes-row">
+          <div class="ed-label">Полосы слева направо по ходу движения — клик по чипу меняет направление</div>
+          <div id="ed-lanes" class="lanes"></div>
+          <div class="row tight">
+            <button type="button" id="ed-lane-add">+ полоса</button>
+            <button type="button" id="ed-lane-del">− полоса</button>
+          </div>
+        </div>
+
+        <div class="ed-row">
+          <label class="ed-field">Действует с
+            <input id="ed-from" type="time">
+          </label>
+          <label class="ed-field">до
+            <input id="ed-to" type="time">
+          </label>
+        </div>
+
+        <div class="ed-row">
+          <label class="ed-field">Дни
+            <select id="ed-days">
+              <option value="all">всегда</option>
+              <option value="even">чётные</option>
+              <option value="odd">нечётные</option>
+              <option value="workdays">будни</option>
+            </select>
+          </label>
+          <label class="ed-field">Комментарий
+            <input id="ed-note" type="text" placeholder="от дома 12 до перекрёстка">
+          </label>
+        </div>
+      </div>
+
+      <div class="ed-foot">
+        <span id="ed-info"></span>
+        <button type="submit" id="ed-save" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </main>
+</div>
+
+<input type="file" id="file-import" accept="application/json,.json" hidden>
+
+<script src="assets/vendor/leaflet.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/geo.js"></script>
+<script src="assets/js/roads.js"></script>
+<script src="data/roads.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/render.js"></script>
+<script src="assets/js/panorama.js"></script>
+<script src="assets/js/editor.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
