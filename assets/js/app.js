@@ -130,8 +130,11 @@
     $('speed-filters-wrap').hidden = !Object.keys(speedsSeen).length;
   }
 
+  var DETAIL_ZOOM = 15;   // ниже этого зума рисуем только полосы, без значков и стрелок
+
   function rerender() {
-    renderedCount = SignRender.render(signsGroup, signs, filters, map);
+    var detail = map.getZoom() >= DETAIL_ZOOM;
+    renderedCount = SignRender.render(signsGroup, signs, filters, map, detail);
     $('shown-count').textContent = renderedCount + ' из ' + signs.length;
   }
 
@@ -244,6 +247,8 @@
         }
       }
     });
+
+    map.on('zoomend', rerender);
 
     // клик по карте в режиме панорамы
     map.on('click', function (e) {

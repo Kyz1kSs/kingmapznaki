@@ -272,7 +272,8 @@ window.SignRender = (function () {
     L.marker(pos, { icon: b, interactive: false, keyboard: false, zIndexOffset: 360 }).addTo(group);
   }
 
-  function render(group, signs, filters, map) {
+  function render(group, signs, filters, map, detail) {
+    if (detail === undefined) detail = true;
     group.clearLayers();
     var shown = 0;
     for (var i = 0; i < signs.length; i++) {
@@ -280,10 +281,12 @@ window.SignRender = (function () {
       if (!matchFilters(s, filters)) continue;
       if (!s.path || s.path.length < 2) continue;
       drawStripes(s, group, map);
-      drawChevrons(s, group);
-      drawLaneArrows(s, group);
-      drawSpeedBadges(s, group);
-      drawStartBadge(s, group);
+      if (detail) {
+        drawChevrons(s, group);
+        drawLaneArrows(s, group);
+        drawSpeedBadges(s, group);
+        drawStartBadge(s, group);
+      }
       shown++;
     }
     return shown;
