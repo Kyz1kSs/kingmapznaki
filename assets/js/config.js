@@ -24,8 +24,8 @@ window.CONFIG = {
   // Бэкенд. Если url/anonKey пустые — сайт работает в локальном режиме
   // (правки видны только тебе и сохраняются в браузере, с экспортом в JSON).
   supabase: {
-    url: '',      // https://xxxxx.supabase.co
-    anonKey: '',  // public anon key
+    url: 'https://bzsctvuutqqwkwikufqn.supabase.co',
+    anonKey: 'sb_publishable_6q2Ht5BmQW9oK4cBaMIlZA_MnZTjUUz',
     table: 'signs'
   },
 
